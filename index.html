@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Phonolab — Análisis de Audio</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #F5F6F2; color: #1C2B27; font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
+
+  h1 { font-family: 'Fraunces', Georgia, serif; font-weight: 560; font-size: 34px; letter-spacing: -0.01em; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  #app { max-width: 980px; margin: 0 auto; padding: 28px 18px 64px; }
+
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+  header span { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A6660; }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+
+  .btn { font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600; padding: 10px 18px;
+         border-radius: 8px; cursor: pointer; border: none; transition: opacity .15s; }
+  .btn:hover { opacity: .85; }
+  .btn-primary { background: #1C2B27; color: #fff; }
+  .btn-record  { background: #D8491F; color: #fff; }
+  .btn-outline { background: #fff; color: #1C2B27; border: 1px solid #DCE0DA; }
+  .btn-danger  { background: #fff; color: #8C3A1E; border: 1px solid #DCE0DA; }
+
+  .panel { background: #fff; border: 1px solid #DCE0DA; border-radius: 12px; overflow: hidden; }
+
+  .section-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .12em;
+                   text-transform: uppercase; color: #5A6660; margin: 0 0 8px; }
+
+  .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 16px; margin-bottom: 18px; }
+  .transport-btns { display: flex; gap: 8px; }
+  .time-display { font-family: 'IBM Plex Mono', monospace; font-size: 14px; }
+  .time-display .cur { color: #D8491F; }
+  .time-display .tot { color: #5A6660; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A6660; }
+  .stats b { color: #1C2B27; }
+
+  #canvas-wrap, #pitch-wrap { position: relative; margin-bottom: 18px; }
+  canvas { width: 100%; display: block; cursor: crosshair; }
+  #waveform-canvas, #pitch-canvas { background: #fff; }
+
+  .cursor-line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid #D8491F; pointer-events: none; }
+  .annotation-mark { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed rgba(19,94,84,0.6); pointer-events: none; }
+
+  #tier { position: relative; height: 56px; cursor: copy; margin-bottom: 14px;
+          background: repeating-linear-gradient(90deg, #fff 0 24px, #FBFCFA 24px 48px); }
+  #tier-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A6660; pointer-events: none; }
+  .tier-mark { position: absolute; top: 0; bottom: 0; border-left: 2px solid #135E54; pointer-events: none; }
+  .tier-label { position: absolute; top: 6px; left: 4px; font-family: 'IBM Plex Mono', monospace;
+                font-size: 11px; background: #135E54; color: #fff; padding: 2px 6px; border-radius: 4px;
+                white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+
+  #ann-list .ann-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #DCE0DA; }
+  #ann-list .ann-row:first-child { border-top: none; }
+  .ann-time { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #135E54;
+              background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }
+  .ann-input { flex: 1; font-family: 'Inter', sans-serif; font-size: 14px; padding: 8px 10px;
+               border: 1px solid #DCE0DA; border-radius: 8px; outline: none; background: #F5F6F2; color: #1C2B27; }
+
+  #empty-state { padding: 44px 24px; text-align: center; }
+  #empty-state h2 { font-family: 'Fraunces', Georgia, serif; font-size: 22px; margin-bottom: 8px; }
+  #empty-state p { color: #5A6660; font-size: 14px; }
+
+  #error-box { background: #FBEDE8; border: 1px solid #EAC4B6; color: #8C3A1E; border-radius: 10px;
+               padding: 10px 14px; font-size: 14px; margin-bottom: 18px; display: none; }
+
+  #rec-indicator { display: none; align-items: center; gap: 12px; padding: 14px 18px;
+                   margin-bottom: 18px; border-radius: 12px; border: 1px solid #DCE0DA; background: #fff; }
+  .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #D8491F; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  #filename { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A6660; }
+  #decoding  { font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+
+  #audio-ui { display: none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Phonolab</h1>
+    <span>onda · curva de pitch · anotaciones</span>
+  </header>
+
+  <!-- source controls -->
+  <div class="row">
+    <button class="btn btn-record" id="btn-record">● Grabar</button>
+    <button class="btn btn-outline" id="btn-upload">Subir WAV / MP3</button>
+    <input type="file" id="file-input" accept="audio/*,.wav,.mp3" style="display:none" />
+    <span id="filename"></span>
+    <span id="decoding"></span>
+  </div>
+
+  <div id="error-box"></div>
+
+  <!-- recording indicator -->
+  <div id="rec-indicator" class="panel">
+    <span class="rec-dot"></span>
+    <span class="mono" style="font-size:14px">Grabando desde el micrófono — pulsa "Detener" cuando termines.</span>
+    <span id="rec-timer" class="mono" style="font-size:14px; margin-left:auto; color:#D8491F">0:00</span>
+  </div>
+
+  <!-- empty state -->
+  <div id="empty-state" class="panel">
+    <h2>Sin audio</h2>
+    <p>Graba desde el micrófono o sube un archivo WAV / MP3 para ver la onda y la curva de pitch.</p>
+  </div>
+
+  <!-- main UI -->
+  <div id="audio-ui">
+    <!-- transport -->
+    <div class="panel transport">
+      <div class="transport-btns">
+        <button class="btn btn-primary" id="btn-playpause">▶ Reproducir</button>
+        <button class="btn btn-outline" id="btn-stop">■ Parar</button>
+      </div>
+      <div class="time-display">
+        <span class="cur" id="time-cur">0:00.00</span>
+        <span class="tot" id="time-tot"> / 0:00.00</span>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <!-- waveform -->
+    <p class="section-label">Onda de sonido — toca para mover el cursor</p>
+    <div id="canvas-wrap" class="panel">
+      <canvas id="waveform-canvas" width="1200" height="180"></canvas>
+      <div class="cursor-line" id="wave-cursor"></div>
+    </div>
+
+    <!-- pitch curve -->
+    <p class="section-label">Curva de pitch (F0) — solo se dibujan los tramos con voz</p>
+    <div id="pitch-wrap" class="panel">
+      <canvas id="pitch-canvas" width="1200" height="280"></canvas>
+      <div class="cursor-line" id="pitch-cursor"></div>
+    </div>
+
+    <!-- annotation tier -->
+    <p class="section-label">Capa de anotaciones — toca para añadir un marcador</p>
+    <div id="tier" class="panel">
+      <span id="tier-empty">capa vacía — toca para añadir tu primer marcador</span>
+      <div class="cursor-line" id="tier-cursor"></div>
+    </div>
+
+    <div class="row">
+      <button class="btn btn-outline" id="btn-add-marker">+ Marcador en el cursor</button>
+    </div>
+
+    <div id="ann-list" class="panel" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+// ─── helpers ────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const WAVE_W = 1200, WAVE_H = 180, PITCH_W = 1200, PITCH_H = 280;
+
+// Pitch analysis settings (Praat-style speech range)
+const MIN_F0 = 60;     // Hz
+const MAX_F0 = 500;    // Hz
+const VOICING_THRESHOLD = 0.45;  // normalized autocorrelation
+const SILENCE_THRESHOLD = 0.01;  // RMS below this = silence
+
+function fmtTime(s) {
+  if (!isFinite(s)) return '0:00.00';
+  const m = Math.floor(s / 60);
+  const sec = (s - m * 60).toFixed(2).padStart(5, '0');
+  return `${m}:${sec}`;
+}
+
+// ─── state ──────────────────────────────────────────────────
+let audioCtx = null, buffer = null, sourceNode = null;
+let playStartCtxTime = 0, playOffset = 0;
+let cursor = 0, isPlaying = false, rafId = null;
+let annotations = [], annIdCounter = 1;
+let recorder = null, recStream = null, recTimer = null, recSecs = 0;
+let pitchTrack = null; // { times:[], freqs:[] } freq = null when unvoiced
+
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// ─── UI helpers ─────────────────────────────────────────────
+function showError(msg) {
+  const el = $('error-box');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function setCursor(t) {
+  cursor = buffer ? Math.max(0, Math.min(t, buffer.duration)) : 0;
+  const pct = buffer ? (cursor / buffer.duration) * 100 : 0;
+  $('wave-cursor').style.left = pct + '%';
+  $('pitch-cursor').style.left = pct + '%';
+  $('tier-cursor').style.left = pct + '%';
+  $('time-cur').textContent = fmtTime(cursor);
+}
+
+function updatePlayBtn() {
+  $('btn-playpause').textContent = isPlaying ? '❚❚ Pausar' : '▶ Reproducir';
+}
+
+// ─── draw waveform ───────────────────────────────────────────
+function drawWaveform() {
+  const cv = $('waveform-canvas'), g = cv.getContext('2d');
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, WAVE_W, WAVE_H);
+  if (!buffer) return;
+  const data = buffer.getChannelData(0);
+  const step = data.length / WAVE_W;
+  g.strokeStyle = '#135E54'; g.lineWidth = 1; g.beginPath();
+  for (let x = 0; x < WAVE_W; x++) {
+    const s=Math.floor(x*step), e=Math.floor((x+1)*step);
+    let mn=1, mx=-1;
+    for (let i=s; i<e && i<data.length; i++) { if(data[i]<mn)mn=data[i]; if(data[i]>mx)mx=data[i]; }
+    if (mn>mx) { mn=0; mx=0; }
+    const y1=((1-mx)/2)*WAVE_H, y2=((1-mn)/2)*WAVE_H;
+    g.moveTo(x+.5, y1); g.lineTo(x+.5, Math.max(y2, y1+1));
+  }
+  g.stroke();
+  g.strokeStyle = 'rgba(28,43,39,.18)'; g.beginPath(); g.moveTo(0,WAVE_H/2); g.lineTo(WAVE_W,WAVE_H/2); g.stroke();
+  // time ticks
+  g.font = '16px IBM Plex Mono, monospace'; g.fillStyle = '#5A6660';
+  const dur = buffer.duration;
+  const niceSteps = [0.1,0.25,0.5,1,2,5,10,30,60];
+  const stepT = niceSteps.find(s => dur/s <= 10) || 120;
+  for (let t=stepT; t<dur; t+=stepT) {
+    const x=(t/dur)*WAVE_W;
+    g.strokeStyle='rgba(28,43,39,.10)'; g.beginPath(); g.moveTo(x,0); g.lineTo(x,WAVE_H); g.stroke();
+    g.fillStyle='#5A6660';
+    g.fillText(t<60 ? `${+t.toFixed(2)}s` : fmtTime(t), x+4, WAVE_H-8);
+  }
+}
+
+// ─── pitch tracking (autocorrelation) ───────────────────────
+function computePitchTrack() {
+  const data = buffer.getChannelData(0);
+  const sr = buffer.sampleRate;
+
+  const minLag = Math.floor(sr / MAX_F0);
+  const maxLag = Math.ceil(sr / MIN_F0);
+  const winSize = Math.min(2 * maxLag, data.length); // ≥ 2 periods of lowest pitch
+
+  // ~10 ms hop, capped at 800 frames for long files
+  let hop = Math.round(sr * 0.01);
+  let nFrames = Math.floor((data.length - winSize) / hop);
+  if (nFrames > 800) { hop = Math.floor((data.length - winSize) / 800); nFrames = 800; }
+  if (nFrames < 1) { pitchTrack = { times: [], freqs: [] }; return; }
+
+  const times = [], freqs = [];
+
+  for (let f = 0; f < nFrames; f++) {
+    const start = f * hop;
+    const t = (start + winSize / 2) / sr;
+    times.push(t);
+
+    // RMS — skip silent frames
+    let rms = 0;
+    for (let i = 0; i < winSize; i++) rms += data[start+i]*data[start+i];
+    rms = Math.sqrt(rms / winSize);
+    if (rms < SILENCE_THRESHOLD) { freqs.push(null); continue; }
+
+    // normalized autocorrelation over the lag range
+    let r0 = 0;
+    for (let i = 0; i < winSize; i++) r0 += data[start+i]*data[start+i];
+    if (r0 === 0) { freqs.push(null); continue; }
+
+    let bestLag = -1, bestR = 0;
+    for (let lag = minLag; lag <= maxLag && lag < winSize; lag++) {
+      let r = 0;
+      for (let i = 0; i < winSize - lag; i++) r += data[start+i]*data[start+i+lag];
+      r /= r0;
+      if (r > bestR) { bestR = r; bestLag = lag; }
+    }
+
+    if (bestLag > 0 && bestR > VOICING_THRESHOLD) {
+      // parabolic interpolation around the peak for sub-sample precision
+      let lag = bestLag;
+      if (bestLag > minLag && bestLag < maxLag) {
+        const rm = acfAt(data, start, winSize, bestLag-1) / r0;
+        const rp = acfAt(data, start, winSize, bestLag+1) / r0;
+        const denom = 2 * (2*bestR - rm - rp);
+        if (denom !== 0) lag = bestLag + (rp - rm) / denom;
+      }
+      freqs.push(sr / lag);
+    } else {
+      freqs.push(null);
+    }
+  }
+
+  // 3-point median filter to remove octave-error spikes
+  const smoothed = freqs.slice();
+  for (let i = 1; i < freqs.length - 1; i++) {
+    if (freqs[i-1] != null && freqs[i] != null && freqs[i+1] != null) {
+      const trio = [freqs[i-1], freqs[i], freqs[i+1]].sort((a,b)=>a-b);
+      smoothed[i] = trio[1];
+    }
+  }
+
+  pitchTrack = { times, freqs: smoothed };
+}
+
+function acfAt(data, start, winSize, lag) {
+  let r = 0;
+  for (let i = 0; i < winSize - lag; i++) r += data[start+i]*data[start+i+lag];
+  return r;
+}
+
+// ─── draw pitch curve ────────────────────────────────────────
+function drawPitch() {
+  const cv = $('pitch-canvas'), g = cv.getContext('2d');
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, PITCH_W, PITCH_H);
+  if (!buffer || !pitchTrack) return { mean:null, min:null, max:null };
+
+  const voiced = pitchTrack.freqs.filter(f => f != null);
+  if (voiced.length === 0) {
+    g.font = '18px IBM Plex Mono, monospace';
+    g.fillStyle = '#5A6660';
+    g.textAlign = 'center';
+    g.fillText('No se detectó voz en este audio', PITCH_W/2, PITCH_H/2);
+    g.textAlign = 'left';
+    return { mean:null, min:null, max:null };
+  }
+
+  // y-range: fit to detected pitch with padding, snapped to nice bounds
+  let fMin = Math.min(...voiced), fMax = Math.max(...voiced);
+  const pad = Math.max(20, (fMax - fMin) * 0.2);
+  let yLo = Math.max(MIN_F0 - 10, Math.floor((fMin - pad) / 25) * 25);
+  let yHi = Math.min(MAX_F0 + 50, Math.ceil((fMax + pad) / 25) * 25);
+  if (yHi - yLo < 50) yHi = yLo + 50;
+
+  const yOf = f => PITCH_H - ((f - yLo) / (yHi - yLo)) * PITCH_H;
+  const xOf = t => (t / buffer.duration) * PITCH_W;
+
+  // horizontal gridlines at nice Hz steps
+  g.font = '16px IBM Plex Mono, monospace';
+  const range = yHi - yLo;
+  const gridStep = range > 300 ? 100 : range > 150 ? 50 : 25;
+  for (let f = Math.ceil(yLo/gridStep)*gridStep; f <= yHi; f += gridStep) {
+    const y = yOf(f);
+    if (y < 14 || y > PITCH_H - 4) continue;
+    g.strokeStyle = 'rgba(28,43,39,.08)';
+    g.beginPath(); g.moveTo(0, y); g.lineTo(PITCH_W, y); g.stroke();
+    g.fillStyle = '#5A6660';
+    g.fillText(`${f} Hz`, 8, y - 4);
+  }
+
+  // pitch curve: connected segments while voiced, dots at each frame
+  g.strokeStyle = '#1A4FA0';
+  g.fillStyle = '#1A4FA0';
+  g.lineWidth = 2.5;
+  let pathOpen = false;
+  g.beginPath();
+  for (let i = 0; i < pitchTrack.times.length; i++) {
+    const f = pitchTrack.freqs[i];
+    if (f == null) { pathOpen = false; continue; }
+    const x = xOf(pitchTrack.times[i]), y = yOf(f);
+    if (!pathOpen) { g.moveTo(x, y); pathOpen = true; }
+    else g.lineTo(x, y);
+  }
+  g.stroke();
+  // dots (Praat-style)
+  for (let i = 0; i < pitchTrack.times.length; i++) {
+    const f = pitchTrack.freqs[i];
+    if (f == null) continue;
+    g.beginPath();
+    g.arc(xOf(pitchTrack.times[i]), yOf(f), 2.6, 0, 2*Math.PI);
+    g.fill();
+  }
+
+  const mean = voiced.reduce((a,b)=>a+b,0) / voiced.length;
+  return { mean: Math.round(mean), min: Math.round(fMin), max: Math.round(fMax) };
+}
+
+// ─── update stats ────────────────────────────────────────────
+function updateStats(pitchStats) {
+  if (!buffer) return;
+  $('time-tot').textContent = ' / ' + fmtTime(buffer.duration);
+  let html =
+    `<span>duración <b>${buffer.duration.toFixed(2)} s</b></span>` +
+    `<span>frecuencia <b>${buffer.sampleRate.toLocaleString()} Hz</b></span>`;
+  if (pitchStats && pitchStats.mean != null) {
+    html +=
+      `<span>pitch medio <b>${pitchStats.mean} Hz</b></span>` +
+      `<span>rango pitch <b>${pitchStats.min}–${pitchStats.max} Hz</b></span>`;
+  }
+  $('stats').innerHTML = html;
+}
+
+// ─── load buffer ────────────────────────────────────────────
+async function loadAudio(arrayBuf, name) {
+  $('decoding').textContent = 'analizando…';
+  showError('');
+  stopPlayback(); cursor=0;
+  annotations=[];
+  try {
+    const ctx = getCtx();
+    buffer = await ctx.decodeAudioData(arrayBuf);
+    $('filename').textContent = name;
+    $('empty-state').style.display = 'none';
+    $('audio-ui').style.display = 'block';
+    drawWaveform();
+    computePitchTrack();
+    const ps = drawPitch();
+    updateStats(ps);
+    setCursor(0);
+    renderAnnotations();
+    $('btn-add-marker').textContent = `+ Marcador en el cursor (${fmtTime(0)})`;
+  } catch(e) {
+    showError('No se pudo decodificar el audio. Prueba con un archivo WAV o MP3.');
+  }
+  $('decoding').textContent = '';
+}
+
+// ─── playback ────────────────────────────────────────────────
+function stopPlayback() {
+  if (sourceNode) { sourceNode.onended=null; try{sourceNode.stop();}catch(e){} sourceNode=null; }
+  cancelAnimationFrame(rafId);
+  isPlaying=false; updatePlayBtn();
+}
+
+function tick() {
+  if (!audioCtx||!sourceNode) return;
+  const t=playOffset+(audioCtx.currentTime-playStartCtxTime);
+  setCursor(t);
+  $('btn-add-marker').textContent = `+ Marcador en el cursor (${fmtTime(cursor)})`;
+  rafId=requestAnimationFrame(tick);
+}
+
+function playFrom(offset) {
+  if (!buffer) return;
+  stopPlayback();
+  const ctx=getCtx();
+  const src=ctx.createBufferSource();
+  src.buffer=buffer; src.connect(ctx.destination);
+  src.onended=()=>{
+    sourceNode=null; cancelAnimationFrame(rafId);
+    isPlaying=false; updatePlayBtn();
+    setCursor(buffer.duration);
+  };
+  src.start(0, offset);
+  sourceNode=src; playStartCtxTime=ctx.currentTime; playOffset=offset;
+  isPlaying=true; updatePlayBtn();
+  rafId=requestAnimationFrame(tick);
+}
+
+function onPlayPause() {
+  if (!buffer) return;
+  if (isPlaying) {
+    const t=playOffset+(audioCtx.currentTime-playStartCtxTime);
+    stopPlayback(); setCursor(t);
+  } else {
+    const start = cursor >= buffer.duration-0.01 ? 0 : cursor;
+    playFrom(start);
+  }
+}
+
+function onStop() { stopPlayback(); setCursor(0); }
+
+function seekTo(frac) {
+  if (!buffer) return;
+  const t=Math.max(0,Math.min(frac*buffer.duration, buffer.duration));
+  if (isPlaying) playFrom(t); else setCursor(t);
+  $('btn-add-marker').textContent = `+ Marcador en el cursor (${fmtTime(t)})`;
+}
+
+function canvasSeek(e, canvas) {
+  const rect=canvas.getBoundingClientRect();
+  seekTo((e.clientX-rect.left)/rect.width);
+}
+
+// ─── annotations ────────────────────────────────────────────
+function addAnnotation(time) {
+  annotations.push({ id: annIdCounter++, time, label: '' });
+  annotations.sort((a,b)=>a.time-b.time);
+  renderAnnotations();
+}
+
+function renderAnnotations() {
+  const tier=$('tier'), list=$('ann-list');
+
+  tier.querySelectorAll('.tier-mark').forEach(el=>el.remove());
+  $('canvas-wrap').querySelectorAll('.annotation-mark').forEach(el=>el.remove());
+  $('pitch-wrap').querySelectorAll('.annotation-mark').forEach(el=>el.remove());
+
+  if (!buffer) return;
+  const dur=buffer.duration;
+
+  $('tier-empty').style.display = annotations.length ? 'none' : 'flex';
+
+  annotations.forEach(a=>{
+    const pct=(a.time/dur)*100+'%';
+
+    const m=document.createElement('div'); m.className='tier-mark'; m.style.left=pct;
+    const lb=document.createElement('span'); lb.className='tier-label';
+    lb.textContent=a.label||fmtTime(a.time); m.appendChild(lb); tier.appendChild(m);
+
+    const wm=document.createElement('div'); wm.className='annotation-mark'; wm.style.left=pct;
+    $('canvas-wrap').appendChild(wm);
+
+    const pm=document.createElement('div'); pm.className='annotation-mark'; pm.style.left=pct;
+    $('pitch-wrap').appendChild(pm);
+  });
+
+  if (annotations.length===0) { list.style.display='none'; return; }
+  list.style.display='block';
+  list.innerHTML='';
+  annotations.forEach(a=>{
+    const row=document.createElement('div'); row.className='ann-row';
+
+    const tb=document.createElement('button'); tb.className='ann-time';
+    tb.textContent=fmtTime(a.time);
+    tb.onclick=()=>{ seekTo(a.time/dur); };
+
+    const inp=document.createElement('input'); inp.className='ann-input';
+    inp.type='text'; inp.placeholder='Etiqueta…'; inp.value=a.label;
+    inp.oninput=()=>{
+      a.label=inp.value;
+      const mark=tier.querySelectorAll('.tier-mark')[annotations.indexOf(a)];
+      if(mark) mark.querySelector('.tier-label').textContent=a.label||fmtTime(a.time);
+    };
+
+    const del=document.createElement('button'); del.className='btn btn-danger'; del.textContent='✕';
+    del.style.padding='8px 12px';
+    del.onclick=()=>{ annotations=annotations.filter(x=>x.id!==a.id); renderAnnotations(); };
+
+    row.appendChild(tb); row.appendChild(inp); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+// ─── recording ───────────────────────────────────────────────
+async function startRecording() {
+  showError('');
+  try {
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    recStream=stream;
+    const rec=new MediaRecorder(stream);
+    const chunks=[];
+    rec.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+    rec.onstop=async()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      const blob=new Blob(chunks,{type:rec.mimeType});
+      const buf=await blob.arrayBuffer();
+      loadAudio(buf,'Grabación del micrófono');
+    };
+    rec.start(); recorder=rec; recSecs=0;
+    $('rec-timer').textContent='0:00';
+    $('rec-indicator').style.display='flex';
+    $('btn-record').textContent='■ Detener';
+    $('btn-record').classList.replace('btn-record','btn-primary');
+    recTimer=setInterval(()=>{ recSecs++; $('rec-timer').textContent=fmtTime(recSecs); },1000);
+    return true;
+  } catch(e) {
+    showError('El acceso al micrófono fue bloqueado. Permítelo en la configuración del navegador o sube un archivo.');
+    return false;
+  }
+}
+
+function stopRecording() {
+  if (recorder && recorder.state!=='inactive') recorder.stop();
+  clearInterval(recTimer); recSecs=0;
+  $('rec-indicator').style.display='none';
+  $('btn-record').textContent='● Grabar';
+  $('btn-record').classList.replace('btn-primary','btn-record');
+}
+
+// ─── event wiring ────────────────────────────────────────────
+let recording=false;
+$('btn-record').onclick=async ()=>{
+  if (!recording) {
+    const ok = await startRecording();
+    recording = ok;
+  } else {
+    stopRecording();
+    recording = false;
+  }
+};
+$('btn-upload').onclick=()=>$('file-input').click();
+$('file-input').onchange=async e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const buf=await f.arrayBuffer(); loadAudio(buf,f.name); e.target.value='';
+};
+$('btn-playpause').onclick=onPlayPause;
+$('btn-stop').onclick=onStop;
+$('btn-add-marker').onclick=()=>{ if(buffer) addAnnotation(cursor); };
+
+$('waveform-canvas').onclick=e=>canvasSeek(e,$('waveform-canvas'));
+$('pitch-canvas').onclick=e=>canvasSeek(e,$('pitch-canvas'));
+$('tier').onclick=e=>{ if(!buffer) return; const r=$('tier').getBoundingClientRect(); addAnnotation(((e.clientX-r.left)/r.width)*buffer.duration); };
+</script>
+</body>
+</html>
